@@ -55,6 +55,14 @@ timer1_flag: .skip 1
 .section .progmem.data, "a", @progbits
 str_init_ok: .asciz "Smart Exhaust OK\r\n"
 str_lcd_init: .asciz "Smart Exhaust"
+str_aman:     .asciz "AMAN   "
+str_waspada:  .asciz "WASPADA"
+str_bahaya:   .asciz "BAHAYA "
+str_lcd_g:    .asciz "G:"
+str_lcd_t:    .asciz " T:"
+str_lcd_c:    .asciz "C "
+str_lcd_h:    .asciz "H:"
+str_lcd_pct:  .asciz "%  "
 
 .section .text
 
@@ -207,7 +215,68 @@ MAIN_LOOP:
     rcall evaluate_status
     rcall update_fan_hybrid
 
+    ; Integrasi LCD
+    rcall update_lcd_display
+
     rjmp MAIN_LOOP
+
+; Fungsi untuk menampilkan data ke LCD (Anggota D)
+update_lcd_display:
+    ; Baris 0: "G:xxx T:xxC H:xx%"
+    ldi r24, 0
+    ldi r22, 0
+    rcall lcd_set_cursor
+
+    ldi ZL, lo8(str_lcd_g)
+    ldi ZH, hi8(str_lcd_g)
+    rcall lcd_print_string
+    lds r24, gas_8bit
+    rcall lcd_print_number
+
+    ldi ZL, lo8(str_lcd_t)
+    ldi ZH, hi8(str_lcd_t)
+    rcall lcd_print_string
+    lds r24, dht11_temperature
+    rcall lcd_print_number
+    ldi ZL, lo8(str_lcd_c)
+    ldi ZH, hi8(str_lcd_c)
+    rcall lcd_print_string
+
+    ldi ZL, lo8(str_lcd_h)
+    ldi ZH, hi8(str_lcd_h)
+    rcall lcd_print_string
+    lds r24, dht11_humidity
+    rcall lcd_print_number
+    ldi ZL, lo8(str_lcd_pct)
+    ldi ZH, hi8(str_lcd_pct)
+    rcall lcd_print_string
+
+    ; Baris 1: Status (AMAN/WASPADA/BAHAYA)
+    ldi r24, 0
+    ldi r22, 1
+    rcall lcd_set_cursor
+
+    lds r16, air_status
+    cpi r16, STATUS_AMAN
+    breq print_lcd_aman
+    cpi r16, STATUS_WASPADA
+    breq print_lcd_waspada
+
+print_lcd_bahaya:
+    ldi ZL, lo8(str_bahaya)
+    ldi ZH, hi8(str_bahaya)
+    rjmp do_print_lcd_status
+print_lcd_aman:
+    ldi ZL, lo8(str_aman)
+    ldi ZH, hi8(str_aman)
+    rjmp do_print_lcd_status
+print_lcd_waspada:
+    ldi ZL, lo8(str_waspada)
+    ldi ZH, hi8(str_waspada)
+
+do_print_lcd_status:
+    rcall lcd_print_string
+    ret
 
 ; Evaluasi status udara berdasarkan gas_8bit dan threshold_8bit
 evaluate_status:
