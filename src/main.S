@@ -37,6 +37,7 @@
 .extern buzzer_on
 .extern buzzer_off
 .extern buzzer_beep
+.extern update_fan_hybrid
 
 ; Variabel global di SRAM
 .section .bss
@@ -204,6 +205,7 @@ MAIN_LOOP:
 
     ; Evaluasi status udara
     rcall evaluate_status
+    rcall update_fan_hybrid
 
     rjmp MAIN_LOOP
 
