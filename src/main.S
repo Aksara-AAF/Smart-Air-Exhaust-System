@@ -5,6 +5,9 @@
 .extern gpio_init
 .extern adc_init
 .extern adc_read
+.extern adc_read_gas
+.extern adc_read_pot
+.extern adc_to_8bit
 .extern timer1_init
 .extern timer2_pwm_init
 .extern fan_set_speed
@@ -35,6 +38,7 @@
 .extern buzzer_off
 .extern buzzer_beep
 
+; Variabel global di SRAM
 .section .bss
 gas_value_l: .skip 1
 gas_value_h: .skip 1
@@ -46,12 +50,14 @@ air_status: .skip 1
 override_flag: .skip 1
 timer1_flag: .skip 1
 
+; String konstan di Flash
 .section .progmem.data, "a", @progbits
 str_init_ok: .asciz "Smart Exhaust OK\r\n"
 str_lcd_init: .asciz "Smart Exhaust"
 
 .section .text
 
+; Interrupt Vector Table
 .org 0x0000
     jmp RESET
 .org 0x0002
@@ -79,10 +85,12 @@ str_lcd_init: .asciz "Smart Exhaust"
 
 .org 0x0050
 
+; ISR INT0: Toggle override_flag saat tombol ditekan
 ISR_INT0:
     push r16
     in r16, SREG
     push r16
+    ; Toggle flag (0 jadi 1, 1 jadi 0)
     lds r16, override_flag
     cpi r16, 0
     breq isr_int0_set_on
@@ -93,11 +101,13 @@ isr_int0_set_on:
     ldi r16, 1
     sts override_flag, r16
 isr_int0_done:
+    ; Restore SREG dan r16
     pop r16
     out SREG, r16
     pop r16
     reti
 
+; ISR Timer1: Set flag setiap 1 detik
 ISR_TIMER1_COMPA:
     push r16
     in r16, SREG
@@ -109,12 +119,15 @@ ISR_TIMER1_COMPA:
     pop r16
     reti
 
+; Entry point: inisialisasi stack dan semua modul
 RESET:
+    ; Inisialisasi stack pointer ke RAMEND
     ldi r16, hi8(RAMEND)
     out SPH, r16
     ldi r16, lo8(RAMEND)
     out SPL, r16
 
+    ; Bersihkan semua variabel SRAM
     clr r1
     clr r16
     sts gas_value_l, r16
@@ -127,6 +140,7 @@ RESET:
     sts override_flag, r16
     sts timer1_flag, r16
 
+    ; Inisialisasi semua modul
     rcall gpio_init
     rcall adc_init
     rcall timer1_init
@@ -137,12 +151,15 @@ RESET:
     rcall dht11_init
     rcall interrupt_init
 
+    ; Aktifkan global interrupt
     sei
 
+    ; Kirim pesan init ke serial monitor
     ldi ZL, lo8(str_init_ok)
     ldi ZH, hi8(str_init_ok)
     rcall usart_send_string
 
+    ; Tampilkan nama sistem di LCD
     rcall lcd_clear
     ldi r24, 0
     ldi r22, 0
@@ -151,11 +168,13 @@ RESET:
     ldi ZH, hi8(str_lcd_init)
     rcall lcd_print_string
 
+; Loop utama: tunggu flag Timer1 setiap 1 detik
 MAIN_LOOP:
     lds r16, timer1_flag
     cpi r16, 1
     brne MAIN_LOOP
 
+    ; Reset flag dan proses
     clr r16
     sts timer1_flag, r16
 
