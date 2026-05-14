@@ -10,7 +10,6 @@
 
 ; Inisialisasi Timer1 Mode CTC 1 detik
 timer1_init:
-    ; Set batas atas menggunakan konstanta TIMER1_1S dari macros.inc
     ldi r16, hi8(TIMER1_1S)
     sts OCR1AH, r16
     ldi r16, lo8(TIMER1_1S)
@@ -30,18 +29,14 @@ timer1_init:
 
 ; Inisialisasi Timer2 Mode Fast PWM untuk Fan
 timer2_pwm_init:
-    ; Set pin PB3 sebagai OUTPUT menggunakan macro FAN_PWM
     sbi DDRB, FAN_PWM
     
-    ; Set Mode Fast PWM, Non-Inverting Mode
     ldi r16, (1 << COM2A1) | (1 << WGM21) | (1 << WGM20)
     sts TCCR2A, r16
     
-    ; Set Prescaler ke 64 
     ldi r16, (1 << CS22)
     sts TCCR2B, r16
     
-    ; Set Duty Cycle awal ke mati menggunakan macro PWM_OFF 
     ldi r16, PWM_OFF
     sts OCR2A, r16
     ret
