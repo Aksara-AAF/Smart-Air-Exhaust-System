@@ -151,6 +151,13 @@ RESET:
     rcall dht11_init
     rcall interrupt_init
 
+    ; Load threshold dari EEPROM
+    rcall eeprom_load_threshold
+    sts threshold_l, r24
+    sts threshold_h, r25
+    rcall adc_to_8bit
+    sts threshold_8bit, r24
+
     ; Aktifkan global interrupt
     sei
 
@@ -178,4 +185,48 @@ MAIN_LOOP:
     clr r16
     sts timer1_flag, r16
 
+    ; Baca sensor gas MQ-135
+    rcall adc_read_gas
+    sts gas_value_l, r24
+    sts gas_value_h, r25
+    rcall adc_to_8bit
+    sts gas_8bit, r24
+
+    ; Baca potensiometer dan simpan threshold
+    rcall adc_read_pot
+    sts threshold_l, r24
+    sts threshold_h, r25
+    rcall eeprom_save_threshold
+    lds r24, threshold_l
+    lds r25, threshold_h
+    rcall adc_to_8bit
+    sts threshold_8bit, r24
+
+    ; Evaluasi status udara
+    rcall evaluate_status
+
     rjmp MAIN_LOOP
+
+; Evaluasi status udara berdasarkan gas_8bit dan threshold_8bit
+evaluate_status:
+    lds r16, gas_8bit
+    lds r17, threshold_8bit
+    mov r18, r17
+    lsr r18 ; r18 = threshold / 2
+    cp r16, r18
+    brsh eval_check_warn
+    ldi r16, STATUS_AMAN
+    sts air_status, r16
+    ret
+eval_check_warn:
+    lds r16, gas_8bit
+    lds r17, threshold_8bit
+    cp r16, r17
+    brsh eval_bahaya
+    ldi r16, STATUS_WASPADA
+    sts air_status, r16
+    ret
+eval_bahaya:
+    ldi r16, STATUS_BAHAYA
+    sts air_status, r16
+    ret
