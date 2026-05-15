@@ -64,6 +64,17 @@ str_lcd_c:    .asciz "C "
 str_lcd_h:    .asciz "H:"
 str_lcd_pct:  .asciz "%  "
 
+; String untuk serial log USART
+str_log_gas:  .asciz "Gas:"
+str_log_tmp:  .asciz "|Tmp:"
+str_log_hum:  .asciz "|Hum:"
+str_log_pipe: .asciz "|"
+str_log_aman: .asciz "AMAN|"
+str_log_waspada: .asciz "WASPADA|"
+str_log_bahaya: .asciz "BAHAYA|"
+str_log_auto: .asciz "AUTO\r\n"
+str_log_manual: .asciz "MANUAL\r\n"
+
 .section .text
 
 ; Interrupt Vector Table
@@ -213,14 +224,20 @@ MAIN_LOOP:
 
     ; Evaluasi status udara
     rcall evaluate_status
+
+    ; Override & Aktuator
+    rcall update_actuators
     rcall update_fan_hybrid
 
     ; Integrasi LCD
     rcall update_lcd_display
 
+    ; Log USART
+    rcall send_serial_log
+
     rjmp MAIN_LOOP
 
-; Fungsi untuk menampilkan data ke LCD (Anggota D)
+; Fungsi untuk menampilkan data ke LCD
 update_lcd_display:
     ; Baris 0: "G:xxx T:xxC H:xx%"
     ldi r24, 0
@@ -300,4 +317,90 @@ eval_check_warn:
 eval_bahaya:
     ldi r16, STATUS_BAHAYA
     sts air_status, r16
+    ret
+
+
+; Update LED dan Buzzer berdasarkan status
+update_actuators:
+    lds r16, air_status
+    cpi r16, STATUS_AMAN
+    breq act_aman
+    cpi r16, STATUS_WASPADA
+    breq act_waspada
+act_bahaya:
+    rcall led_set_bahaya
+    rcall buzzer_on
+    ret
+act_aman:
+    rcall led_set_aman
+    rcall buzzer_off
+    ret
+act_waspada:
+    rcall led_set_waspada
+    rcall buzzer_beep
+    ret
+
+
+; Kirim format log USART
+send_serial_log:
+    ; "Gas:"
+    ldi ZL, lo8(str_log_gas)
+    ldi ZH, hi8(str_log_gas)
+    rcall usart_send_string
+    lds r24, gas_8bit
+    rcall usart_send_number
+
+    ; "|Tmp:"
+    ldi ZL, lo8(str_log_tmp)
+    ldi ZH, hi8(str_log_tmp)
+    rcall usart_send_string
+    lds r24, dht11_temperature
+    rcall usart_send_number
+
+    ; "|Hum:"
+    ldi ZL, lo8(str_log_hum)
+    ldi ZH, hi8(str_log_hum)
+    rcall usart_send_string
+    lds r24, dht11_humidity
+    rcall usart_send_number
+
+    ; "|"
+    ldi ZL, lo8(str_log_pipe)
+    ldi ZH, hi8(str_log_pipe)
+    rcall usart_send_string
+
+    ; Status aman/waspada/bahaya
+    lds r16, air_status
+    cpi r16, STATUS_AMAN
+    breq log_stat_aman
+    cpi r16, STATUS_WASPADA
+    breq log_stat_waspada
+log_stat_bahaya:
+    ldi ZL, lo8(str_log_bahaya)
+    ldi ZH, hi8(str_log_bahaya)
+    rjmp log_stat_done
+log_stat_aman:
+    ldi ZL, lo8(str_log_aman)
+    ldi ZH, hi8(str_log_aman)
+    rjmp log_stat_done
+log_stat_waspada:
+    ldi ZL, lo8(str_log_waspada)
+    ldi ZH, hi8(str_log_waspada)
+log_stat_done:
+    rcall usart_send_string
+
+    ; Status override (auto/manual)
+    lds r16, override_flag
+    cpi r16, 1
+    breq log_mode_manual
+log_mode_auto:
+    ldi ZL, lo8(str_log_auto)
+    ldi ZH, hi8(str_log_auto)
+    rjmp log_mode_done
+log_mode_manual:
+    ldi ZL, lo8(str_log_manual)
+    ldi ZH, hi8(str_log_manual)
+log_mode_done:
+    rcall usart_send_string
+
     ret
