@@ -333,3 +333,26 @@ lcd_num_ones:
     rcall   lcd_send_data
 
     ret
+
+.global lcd_print_number_2
+lcd_print_number_2:
+    mov     r18, r24
+    ; Puluhan
+    ldi     r16, 0
+lcd_num2_tens:
+    cpi     r18, 10
+    brcs    lcd_num2_ones
+    subi    r18, 10
+    inc     r16
+    rjmp    lcd_num2_tens
+lcd_num2_ones:
+    ldi     r24, '0'
+    add     r24, r16
+    rcall   lcd_send_data
+
+    ; Satuan
+    ldi     r24, '0'
+    add     r24, r18
+    rcall   lcd_send_data
+
+    ret

@@ -23,6 +23,7 @@
 .extern lcd_send_data
 .extern lcd_print_string
 .extern lcd_print_number
+.extern lcd_print_number_2
 .extern interrupt_init
 .extern eeprom_save_threshold
 .extern eeprom_load_threshold
@@ -39,6 +40,8 @@
 .extern buzzer_beep
 .extern update_fan_hybrid
 
+.global gas_8bit
+
 ; Variabel global di SRAM
 .section .bss
 gas_value_l: .skip 1
@@ -50,19 +53,22 @@ threshold_8bit: .skip 1
 air_status: .skip 1
 override_flag: .skip 1
 timer1_flag: .skip 1
+lcd_page_counter: .skip 1
 
 ; String konstan di Flash
 .section .progmem.data, "a", @progbits
 str_init_ok: .asciz "Smart Exhaust OK\r\n"
 str_lcd_init: .asciz "Smart Exhaust"
-str_aman:     .asciz "AMAN   "
-str_waspada:  .asciz "WASPADA"
-str_bahaya:   .asciz "BAHAYA "
 str_lcd_g:    .asciz "G:"
-str_lcd_t:    .asciz " T:"
-str_lcd_c:    .asciz "C "
-str_lcd_h:    .asciz "H:"
-str_lcd_pct:  .asciz "%  "
+str_lcd_t:    .asciz "|T:"
+str_lcd_h:    .asciz "|H:"
+str_lcd_fan:  .asciz "FAN SPEED:      "
+str_lcd_pwm:  .asciz "/255"
+str_aman:     .asciz "AMAN|"
+str_waspada:  .asciz "WASPADA|"
+str_bahaya:   .asciz "BAHAYA|"
+str_mode_auto:.asciz "AUTO  "
+str_mode_man: .asciz "MANUAL"
 
 ; String untuk serial log USART
 str_log_gas:  .asciz "Gas:"
@@ -72,38 +78,38 @@ str_log_pipe: .asciz "|"
 str_log_aman: .asciz "AMAN|"
 str_log_waspada: .asciz "WASPADA|"
 str_log_bahaya: .asciz "BAHAYA|"
-str_log_auto: .asciz "AUTO\r\n"
-str_log_manual: .asciz "MANUAL\r\n"
+str_log_auto: .asciz "AUTO|Fan:"
+str_log_manual: .asciz "MANUAL|Fan:"
 
-.section .text
+.section .vectors
 
 ; Interrupt Vector Table
 .org 0x0000
     jmp RESET
-.org 0x0002
-    jmp ISR_INT0
 .org 0x0004
-    reti
-.org 0x0006
-    reti
+    jmp ISR_INT0
 .org 0x0008
-    reti
-.org 0x000A
     reti
 .org 0x000C
     reti
-.org 0x000E
-    reti
 .org 0x0010
-    reti
-.org 0x0012
     reti
 .org 0x0014
     reti
-.org 0x0016
+.org 0x0018
+    reti
+.org 0x001C
+    reti
+.org 0x0020
+    reti
+.org 0x0024
+    reti
+.org 0x0028
+    reti
+.org 0x002C
     jmp ISR_TIMER1_COMPA
 
-.org 0x0050
+.section .text
 
 ; ISR INT0: Toggle override_flag saat tombol ditekan
 ISR_INT0:
@@ -251,7 +257,21 @@ fan_override_done:
 
 ; Fungsi untuk menampilkan data ke LCD
 update_lcd_display:
-    ; Baris 0: "G:xxx T:xxC H:xx%"
+    ; Increment page counter
+    lds r16, lcd_page_counter
+    inc r16
+    cpi r16, 5
+    brne lcd_page_save
+    ldi r16, 0
+lcd_page_save:
+    sts lcd_page_counter, r16
+
+    ; Check if we should show page 2
+    cpi r16, 3
+    brsh draw_page_2
+
+draw_page_1:
+    ; Baris 0: "G:XXX|T:XX|H:XX"
     ldi r24, 0
     ldi r22, 0
     rcall lcd_set_cursor
@@ -266,21 +286,19 @@ update_lcd_display:
     ldi ZH, hi8(str_lcd_t)
     rcall lcd_print_string
     lds r24, dht11_temperature
-    rcall lcd_print_number
-    ldi ZL, lo8(str_lcd_c)
-    ldi ZH, hi8(str_lcd_c)
-    rcall lcd_print_string
+    rcall lcd_print_number_2
 
     ldi ZL, lo8(str_lcd_h)
     ldi ZH, hi8(str_lcd_h)
     rcall lcd_print_string
     lds r24, dht11_humidity
-    rcall lcd_print_number
-    ldi ZL, lo8(str_lcd_pct)
-    ldi ZH, hi8(str_lcd_pct)
-    rcall lcd_print_string
+    rcall lcd_print_number_2
 
-    ; Baris 1: Status (AMAN/WASPADA/BAHAYA)
+    ; Spasi untuk membersihkan karakter sisa
+    ldi r24, ' '
+    rcall lcd_send_data
+
+    ; Baris 1: Status (AMAN|AUTO)
     ldi r24, 0
     ldi r22, 1
     rcall lcd_set_cursor
@@ -305,6 +323,51 @@ print_lcd_waspada:
 
 do_print_lcd_status:
     rcall lcd_print_string
+
+    ; Cetak Mode Override
+    lds r16, override_flag
+    cpi r16, 1
+    breq print_lcd_man
+print_lcd_auto:
+    ldi ZL, lo8(str_mode_auto)
+    ldi ZH, hi8(str_mode_auto)
+    rjmp do_print_lcd_mode
+print_lcd_man:
+    ldi ZL, lo8(str_mode_man)
+    ldi ZH, hi8(str_mode_man)
+do_print_lcd_mode:
+    rcall lcd_print_string
+    ret
+
+draw_page_2:
+    ; Baris 0: FAN SPEED:
+    ldi r24, 0
+    ldi r22, 0
+    rcall lcd_set_cursor
+    ldi ZL, lo8(str_lcd_fan)
+    ldi ZH, hi8(str_lcd_fan)
+    rcall lcd_print_string
+
+    ; Baris 1: xxx /255
+    ldi r24, 0
+    ldi r22, 1
+    rcall lcd_set_cursor
+    
+    lds r24, 0xB3 ; Baca register OCR2A (Kecepatan PWM)
+    rcall lcd_print_number
+
+    ldi ZL, lo8(str_lcd_pwm)
+    ldi ZH, hi8(str_lcd_pwm)
+    rcall lcd_print_string
+
+    ; Clear the rest of the line
+    ldi r17, 8
+lcd_clear_pwm:
+    ldi r24, ' '
+    rcall lcd_send_data
+    dec r17
+    brne lcd_clear_pwm
+
     ret
 
 ; Evaluasi status udara berdasarkan gas_8bit dan threshold_8bit
@@ -418,4 +481,16 @@ log_mode_manual:
 log_mode_done:
     rcall usart_send_string
 
+    ; Cetak Fan Speed (OCR2A)
+    lds r24, 0xB3
+    clr r25
+    rcall usart_send_number
+
+    ; Tambahkan "/255" ke log
+    ldi ZL, lo8(str_lcd_pwm)
+    ldi ZH, hi8(str_lcd_pwm)
+    rcall usart_send_string
+
+    ; Baris baru
+    rcall usart_send_newline
     ret

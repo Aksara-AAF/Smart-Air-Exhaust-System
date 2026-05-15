@@ -96,8 +96,17 @@ bit_is_zero:
     
     ; Simpan data ke variabel eksternal yang di request main.S
     lds r16, dht_buffer       
+    cpi r16, 91
+    brcs dht_hum_ok
+    ldi r16, 90
+dht_hum_ok:
     sts dht11_humidity, r16
+
     lds r16, dht_buffer+2     
+    cpi r16, 51
+    brcs dht_temp_ok
+    ldi r16, 50
+dht_temp_ok:
     sts dht11_temperature, r16
 
 dht_error:

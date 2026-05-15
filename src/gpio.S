@@ -68,14 +68,14 @@ led_set_bahaya:
 
 buzzer_on:
     in      r16, PORTD
-    ori     r16, (1 << BUZZER_PIN)
+    andi    r16, ~(1 << BUZZER_PIN)
     out     PORTD, r16
     ret
 
 
 buzzer_off:
     in      r16, PORTD
-    andi    r16, ~(1 << BUZZER_PIN)
+    ori     r16, (1 << BUZZER_PIN)
     out     PORTD, r16
     ret
 
