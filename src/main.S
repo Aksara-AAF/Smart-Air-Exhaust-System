@@ -222,12 +222,24 @@ MAIN_LOOP:
     rcall adc_to_8bit
     sts threshold_8bit, r24
 
+    ; Baca suhu dan kelembaban dari DHT11
+    rcall dht11_read
+
     ; Evaluasi status udara
     rcall evaluate_status
 
     ; Override & Aktuator
     rcall update_actuators
+    
+    lds r16, override_flag
+    cpi r16, 1
+    breq manual_override_fan
     rcall update_fan_hybrid
+    rjmp fan_override_done
+manual_override_fan:
+    ldi r24, PWM_MAX
+    rcall fan_set_speed
+fan_override_done:
 
     ; Integrasi LCD
     rcall update_lcd_display
@@ -348,6 +360,7 @@ send_serial_log:
     ldi ZH, hi8(str_log_gas)
     rcall usart_send_string
     lds r24, gas_8bit
+    clr r25
     rcall usart_send_number
 
     ; "|Tmp:"
@@ -355,6 +368,7 @@ send_serial_log:
     ldi ZH, hi8(str_log_tmp)
     rcall usart_send_string
     lds r24, dht11_temperature
+    clr r25
     rcall usart_send_number
 
     ; "|Hum:"
@@ -362,6 +376,7 @@ send_serial_log:
     ldi ZH, hi8(str_log_hum)
     rcall usart_send_string
     lds r24, dht11_humidity
+    clr r25
     rcall usart_send_number
 
     ; "|"
