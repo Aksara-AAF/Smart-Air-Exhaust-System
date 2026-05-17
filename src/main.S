@@ -165,6 +165,7 @@ RESET:
     sts air_status, r16
     sts override_flag, r16
     sts timer1_flag, r16
+    sts lcd_page_counter, r16
 
     ; Inisialisasi semua modul
     rcall gpio_init
